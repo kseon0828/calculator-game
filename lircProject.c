@@ -4,11 +4,16 @@
 #include <stdlib.h>
 #include <lirc/lirc_client.h>
 #include <time.h>
+#include <unistd.h>
+#include <pthread.h>
 
-#define LED_GREEN 27
-#define LED_RED 26
+float tone[1] = {1000000/(523.3*2)};
 
-int result;
+#define LED_GREEN 	27
+#define LED_RED 	26
+#define BUZZER 		29
+
+int result, correct=1, start = 0;
 char inputResult[10];
 int questNum =1, length = 0;
 int nCnt = 0, cCnt = 0;
@@ -43,14 +48,46 @@ void randomOperate(){
 	fflush(stdout);
 }
 
+void skDelay(unsigned int t){
+	unsigned int cur = micros();
+
+	while( micros()<(cur+ t));
+}
+
+void *sound(void *argumentPointer)
+{	
+	unsigned int now;
+	int arr[] = {0};
+	int arrSize = sizeof(arr)/sizeof(int);
+
+	while(1){
+		if(correct==0){
+			for(int i=0 ; i<arrSize; i++){
+				now = millis();
+
+				while(millis()<(now + 500)){
+					digitalWrite(BUZZER, 1);
+					skDelay(tone[arr[i]]);
+					digitalWrite(BUZZER, 0);
+					skDelay(tone[arr[i]]);
+				}
+			}
+			
+		}
+	}
+}
+
 void ledOn(int ledNum){
 	if(ledNum == 1) {
 		digitalWrite(LED_GREEN, 1);
 		digitalWrite(LED_RED, 0);
+		correct = 1;
 	}
 	else {
 		digitalWrite(LED_GREEN, 0);
 		digitalWrite(LED_RED, 1);
+		start = 1;
+		correct = 0;
 	}
 }
 
@@ -69,6 +106,7 @@ void checkAnswer(int inputNum){
 
 int main(){
 	struct lirc_config *config;
+	pthread_t threadID1, threadID2;
 
 	int buttonTimer = millis();
 	char *code;
@@ -77,6 +115,9 @@ int main(){
 
 	pinMode(LED_GREEN, OUTPUT);
 	pinMode(LED_RED, OUTPUT);
+	pinMode(BUZZER, OUTPUT);
+
+	pthread_create(&threadID1, NULL, sound, NULL);
 
 	if(lirc_init("lirc", 1)==-1)
 		exit(EXIT_FAILURE);
@@ -88,7 +129,7 @@ int main(){
 				if(code ==NULL)
 					continue;
 
-				if(millis() - buttonTimer > 600){
+				if(millis() - buttonTimer > 600){										
 					if(strstr(code, "KEY_1")){
 						printf("1");
 						fflush(stdout);
@@ -155,6 +196,8 @@ int main(){
 
 						digitalWrite(LED_GREEN, 0);
 						digitalWrite(LED_RED, 0);
+						
+						pthread_join(threadID1, NULL);
 
 						free(code);
 						lirc_freeconfig(config);
